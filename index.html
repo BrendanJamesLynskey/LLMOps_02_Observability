@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMOps 02 — LLM Observability</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-card: #0d1117;
+            --bg-code: #161b22;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent: #76B900;
+            --accent-dim: #76B90044;
+            --accent-glow: #76B90033;
+            --border: #21262d;
+            --font-display: 'Space Grotesk', sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-body: 'Inter', sans-serif;
+            --max-width: 900px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            font-size: 17px;
+            line-height: 1.7;
+            overflow-x: hidden;
+        }
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 1.5rem;
+            text-align: center;
+            position: relative;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .hero > * { position: relative; z-index: 1; }
+        .series-label {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--accent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: clamp(2rem, 5vw, 3.2rem);
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.2;
+            margin-bottom: 1rem;
+        }
+        .hero h1 .accent { color: var(--accent); }
+        .hero .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 640px;
+            margin-bottom: 2rem;
+        }
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            margin-bottom: 2.5rem;
+        }
+        .tag {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+            white-space: nowrap;
+        }
+        .pipeline {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            max-width: var(--max-width);
+        }
+        .pipeline-step {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            padding: 0.3rem 0.7rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        .pipeline-arrow { color: var(--accent); font-size: 0.9rem; font-weight: 700; }
+        .slide {
+            min-height: 100vh;
+            max-width: var(--max-width);
+            margin: 0 auto;
+            padding: 4rem 1.5rem;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .slide-number {
+            font-family: var(--font-display);
+            font-size: 5rem;
+            font-weight: 700;
+            color: var(--accent-dim);
+            position: absolute;
+            top: 2rem;
+            right: 1.5rem;
+            line-height: 1;
+            user-select: none;
+        }
+        .slide h2 {
+            font-family: var(--font-display);
+            font-size: 1.9rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 1.5rem;
+            line-height: 1.25;
+        }
+        .slide h3 {
+            font-family: var(--font-display);
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .slide p { margin-bottom: 1rem; color: var(--text-secondary); }
+        .slide p strong { color: var(--text-primary); }
+        .slide ul, .slide ol { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--text-secondary); }
+        .slide li { margin-bottom: 0.4rem; }
+        .slide li strong { color: var(--text-primary); }
+        .slide code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            padding: 0.05rem 0.35rem;
+            border-radius: 3px;
+            color: #c9d1d9;
+        }
+        .code-block {
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin: 1.25rem 0;
+            overflow: hidden;
+        }
+        .code-header {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent);
+            background: rgba(118, 185, 0, 0.08);
+            padding: 0.4rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .code-block pre { margin: 0; padding: 1rem; overflow-x: auto; }
+        .code-block code {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #c9d1d9;
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+        .kw { color: #ff7b72; }
+        .fn { color: #d2a8ff; }
+        .str { color: #a5d6ff; }
+        .cm { color: #8b949e; font-style: italic; }
+        .num { color: #79c0ff; }
+        .type { color: #ffa657; }
+        .dir { color: #ff7b72; }
+        .mac { color: #ffa657; }
+        .table-wrap {
+            overflow-x: auto;
+            margin: 1.25rem 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th {
+            background: var(--bg-code);
+            color: var(--accent);
+            font-weight: 600;
+            text-align: left;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--font-display);
+            white-space: nowrap;
+        }
+        td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:nth-child(even) td { background: rgba(13, 17, 23, 0.5); }
+        .diagram-flow {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-box {
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            text-align: center;
+            white-space: nowrap;
+        }
+        .diagram-box.accent { border-color: var(--accent); color: var(--accent); background: rgba(118, 185, 0, 0.08); }
+        .diagram-box.dim { color: var(--text-secondary); border-color: var(--border); }
+        .diagram-arrow { color: var(--accent); font-size: 1.3rem; font-weight: 700; }
+        .diagram-vertical {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-vertical .diagram-arrow { font-size: 1.1rem; }
+        .hierarchy {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .hierarchy-level { display: flex; align-items: center; gap: 0.75rem; }
+        .hierarchy-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            min-width: 80px;
+            text-align: right;
+        }
+        .hierarchy-items { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .hierarchy-item {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .hierarchy-item.accent { border-color: var(--accent); color: var(--accent); background: rgba(118, 185, 0, 0.08); }
+        .diagram-grid {
+            display: grid;
+            gap: 0.75rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        .diagram-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+        .diagram-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .diagram-panel {
+            padding: 1rem;
+            background: var(--bg-code);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .diagram-panel.accent-border { border-left: 3px solid var(--accent); }
+        .diagram-panel h4 {
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+        }
+        .diagram-panel p, .diagram-panel ul { font-size: 0.85rem; }
+        .callout {
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 8px 8px 0;
+            padding: 1rem 1.25rem;
+            margin: 1.25rem 0;
+        }
+        .callout p { margin-bottom: 0; }
+        .callout p + p { margin-top: 0.5rem; }
+        .callout .callout-label {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.3rem;
+        }
+        .contents-list { list-style: none; padding-left: 0; counter-reset: contents; }
+        .contents-list li {
+            counter-increment: contents;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .contents-list li:last-child { border-bottom: none; }
+        .contents-list li::before {
+            content: counter(contents, decimal-leading-zero);
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            color: var(--accent);
+            min-width: 2rem;
+        }
+        .contents-list a { color: var(--text-primary); text-decoration: none; transition: color 0.2s; }
+        .contents-list a:hover { color: var(--accent); }
+        .footer {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+            max-width: var(--max-width);
+            margin: 0 auto;
+        }
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        .canvas-wrap {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1.25rem 0;
+            overflow-x: auto;
+        }
+        .canvas-wrap canvas, .canvas-wrap svg { display: block; margin: 0 auto; max-width: 100%; }
+        .badge {
+            display: inline-block;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            vertical-align: middle;
+            margin-left: 0.3rem;
+        }
+        .badge.ok    { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+        .badge.warn  { border-color: #ffa657; color: #ffa657; background: rgba(255,166,87,0.08); }
+        .badge.bad   { border-color: #ff7b72; color: #ff7b72; background: rgba(255,123,114,0.08); }
+        @media (max-width: 640px) {
+            .slide { padding: 3rem 1rem; min-height: auto; }
+            .slide-number { font-size: 3rem; top: 1.5rem; right: 1rem; }
+            .slide h2 { font-size: 1.5rem; }
+            .diagram-grid.cols-2, .diagram-grid.cols-3 { grid-template-columns: 1fr; }
+            .pipeline { gap: 0.15rem; }
+            .pipeline-step { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+            .hero h1 { font-size: 1.8rem; }
+            table { font-size: 0.78rem; }
+        }
+    </style>
+</head>
+<body>
+<header class="hero">
+    <div class="series-label">Production LLMOps Series &mdash; Presentation 02</div>
+    <h1>LLM <span class="accent">Observability</span></h1>
+    <p class="subtitle">Trace structure, OpenTelemetry GenAI semantic conventions, Langfuse, Arize Phoenix, Helicone &amp; LangSmith &mdash; what to capture, how to sample, and how to keep PII out of your traces.</p>
+
+    <div class="tags">
+        <span class="tag">OpenTelemetry</span>
+        <span class="tag">GenAI Conventions</span>
+        <span class="tag">Langfuse</span>
+        <span class="tag">Arize Phoenix</span>
+        <span class="tag">Helicone</span>
+        <span class="tag">LangSmith</span>
+        <span class="tag">Sampling</span>
+    </div>
+
+    <div class="pipeline">
+        <span class="pipeline-step">Instrument</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Span / Trace</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Export (OTLP)</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Collector</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Platform</span>
+        <span class="pipeline-arrow">&rarr;</span>
+        <span class="pipeline-step">Alert / Eval</span>
+    </div>
+</header>
+
+<section class="slide" id="slide-00">
+    <div class="slide-number">00</div>
+    <h2>Topics We&rsquo;ll Cover</h2>
+    <ul class="contents-list">
+        <li><a href="#slide-01">Why LLM Observability Is Different</a></li>
+        <li><a href="#slide-02">Trace Structure &mdash; Request, Completion, Tool Calls, Sub-Spans</a></li>
+        <li><a href="#slide-03">OpenTelemetry GenAI Semantic Conventions</a></li>
+        <li><a href="#slide-04">Langfuse &mdash; Open Source, Self-Host</a></li>
+        <li><a href="#slide-05">Arize Phoenix &mdash; OTel-Native, Eval Built-In</a></li>
+        <li><a href="#slide-06">Helicone &amp; LangSmith &mdash; Hosted Options</a></li>
+        <li><a href="#slide-07">Sampling Strategy &mdash; What to Capture</a></li>
+        <li><a href="#slide-08">PII Handling &amp; Retention</a></li>
+        <li><a href="#slide-09">What to Take Away</a></li>
+    </ul>
+</section>
+
+<section class="slide" id="slide-01">
+    <div class="slide-number">01</div>
+    <h2>Why LLM Observability Is Different</h2>
+    <p>Conventional distributed tracing is about latency and errors on deterministic code paths. LLM observability needs to track additional dimensions that don&rsquo;t exist in HTTP microservices.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>What changes</h4>
+            <ul>
+                <li><strong>Token economics</strong> &mdash; cost is a function of prompt + completion tokens, not request count</li>
+                <li><strong>Non-determinism</strong> &mdash; same input, different output; you must capture both</li>
+                <li><strong>Quality metrics</strong> &mdash; latency alone doesn&rsquo;t tell you if the answer was correct</li>
+                <li><strong>Nested reasoning</strong> &mdash; tool calls, sub-agents, retrieval steps nest inside one &ldquo;request&rdquo;</li>
+                <li><strong>Long inputs</strong> &mdash; prompts can be 128 K tokens; serialising them naively bloats your trace store</li>
+            </ul>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>New signals needed</h4>
+            <ul>
+                <li><code>gen_ai.usage.input_tokens</code> / <code>output_tokens</code></li>
+                <li><code>gen_ai.usage.input_cost</code> / <code>output_cost</code> (in USD)</li>
+                <li>Time-to-first-token (TTFT) separately from total duration</li>
+                <li>Model ID + version (models change quietly)</li>
+                <li>Finish reason (<code>stop</code>, <code>length</code>, <code>tool_calls</code>, <code>content_filter</code>)</li>
+                <li>Eval scores attached post-hoc to spans</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">The eval loop</div>
+        <p>LLM observability is incomplete without an evaluation loop: instrument &rarr; capture traces &rarr; run automated evals (LLM-as-judge, unit evals, human annotation) &rarr; attach scores to trace spans &rarr; alert on degradation. This is the core difference between &ldquo;logging LLM calls&rdquo; and true observability.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-02">
+    <div class="slide-number">02</div>
+    <h2>Trace Structure &mdash; Request, Completion, Tool Calls, Sub-Spans</h2>
+    <p>An LLM trace is a tree of spans. The root span represents the user-visible operation; every model call, tool invocation, retrieval, and sub-agent call is a child span. The schema below is the Langfuse / Phoenix convention &mdash; also the target for OTel GenAI 1.x.</p>
+
+    <div class="hierarchy">
+        <div class="hierarchy-level">
+            <div class="hierarchy-label">Trace root</div>
+            <div class="hierarchy-items">
+                <div class="hierarchy-item accent">user-request: &ldquo;What is my invoice balance?&rdquo;</div>
+            </div>
+        </div>
+        <div class="hierarchy-level">
+            <div class="hierarchy-label">L1 spans</div>
+            <div class="hierarchy-items">
+                <div class="hierarchy-item accent">LLM call &mdash; gpt-4o</div>
+                <div class="hierarchy-item">retrieval &mdash; vector-db</div>
+            </div>
+        </div>
+        <div class="hierarchy-level">
+            <div class="hierarchy-label">L2 spans</div>
+            <div class="hierarchy-items">
+                <div class="hierarchy-item">tool: get_invoice_list</div>
+                <div class="hierarchy-item">tool: get_invoice_detail</div>
+                <div class="hierarchy-item">embed query</div>
+                <div class="hierarchy-item">ann search (k=5)</div>
+            </div>
+        </div>
+        <div class="hierarchy-level">
+            <div class="hierarchy-label">L3 spans</div>
+            <div class="hierarchy-items">
+                <div class="hierarchy-item">LLM call &mdash; gpt-4o (final answer)</div>
+                <div class="hierarchy-item">SQL: SELECT invoices WHERE …</div>
+                <div class="hierarchy-item">SQL: SELECT line_items WHERE …</div>
+            </div>
+        </div>
+    </div>
+
+    <h3>Span attributes by span type</h3>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Span kind</th><th>Must carry</th><th>Should carry</th></tr></thead>
+            <tbody>
+                <tr><td><strong>LLM</strong></td><td>model id, input tokens, output tokens, finish reason, TTFT</td><td>full prompt (sampled), full completion (sampled), cost, temperature, tool definitions</td></tr>
+                <tr><td><strong>Tool</strong></td><td>tool name, input args, output, duration</td><td>error message if failed, parent LLM span id</td></tr>
+                <tr><td><strong>Retrieval</strong></td><td>query text, k, top-k doc ids, latency</td><td>similarity scores, embedding model, index name</td></tr>
+                <tr><td><strong>Chain / Agent</strong></td><td>start/end time, status</td><td>intermediate steps, eval scores (attached post-hoc)</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Trace ID propagation</div>
+        <p>Propagate <code>traceparent</code> (W3C Trace Context) across every async boundary, HTTP call, and queue message. Without this, tool-call spans from worker processes appear as orphaned root spans. Add <code>traceparent</code> to your task payloads and read it on the worker side before starting spans.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-03">
+    <div class="slide-number">03</div>
+    <h2>OpenTelemetry GenAI Semantic Conventions</h2>
+    <p>The OTel <strong>GenAI semantic conventions</strong> (OTEP 0228, stabilised in opentelemetry-semantic-conventions v1.27+) define the standard attribute namespace for LLM spans. Using them means your traces are portable across any OTel-compatible backend.</p>
+
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Attribute</th><th>Type</th><th>Example</th></tr></thead>
+            <tbody>
+                <tr><td><code>gen_ai.system</code></td><td>string</td><td><code>openai</code>, <code>anthropic</code>, <code>vertex_ai</code></td></tr>
+                <tr><td><code>gen_ai.operation.name</code></td><td>string</td><td><code>chat</code>, <code>text_completion</code>, <code>embeddings</code></td></tr>
+                <tr><td><code>gen_ai.request.model</code></td><td>string</td><td><code>gpt-4o-2024-08-06</code></td></tr>
+                <tr><td><code>gen_ai.response.model</code></td><td>string</td><td>Actual model used (may differ on fallback)</td></tr>
+                <tr><td><code>gen_ai.usage.input_tokens</code></td><td>int</td><td><code>1024</code></td></tr>
+                <tr><td><code>gen_ai.usage.output_tokens</code></td><td>int</td><td><code>256</code></td></tr>
+                <tr><td><code>gen_ai.response.finish_reasons</code></td><td>string[]</td><td><code>["stop"]</code>, <code>["tool_calls"]</code></td></tr>
+                <tr><td><code>gen_ai.request.temperature</code></td><td>double</td><td><code>0.7</code></td></tr>
+                <tr><td><code>gen_ai.request.max_tokens</code></td><td>int</td><td><code>4096</code></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3>Events (not span attributes) for content</h3>
+    <div class="code-block">
+        <div class="code-header">OTel GenAI event model (OTEP 0228) &mdash; Python SDK</div>
+<pre><code><span class="kw">from</span> opentelemetry <span class="kw">import</span> trace
+<span class="kw">from</span> opentelemetry.semconv._incubating.attributes <span class="kw">import</span> gen_ai_attributes <span class="kw">as</span> ga
+
+tracer = trace.<span class="fn">get_tracer</span>(<span class="str">"my-llm-app"</span>)
+
+<span class="kw">with</span> tracer.<span class="fn">start_as_current_span</span>(<span class="str">"chat"</span>, attributes={
+    ga.<span class="type">GEN_AI_SYSTEM</span>: <span class="str">"openai"</span>,
+    ga.<span class="type">GEN_AI_OPERATION_NAME</span>: <span class="str">"chat"</span>,
+    ga.<span class="type">GEN_AI_REQUEST_MODEL</span>: <span class="str">"gpt-4o"</span>,
+}) <span class="kw">as</span> span:
+    <span class="cm"># content goes in Events, not attributes — keeps spans small</span>
+    span.<span class="fn">add_event</span>(<span class="str">"gen_ai.user.message"</span>,
+        attributes={<span class="str">"content"</span>: user_text})        <span class="cm"># may be redacted</span>
+    response = client.chat.completions.<span class="fn">create</span>(...)
+    span.<span class="fn">set_attribute</span>(ga.<span class="type">GEN_AI_USAGE_INPUT_TOKENS</span>,
+        response.usage.prompt_tokens)
+    span.<span class="fn">set_attribute</span>(ga.<span class="type">GEN_AI_USAGE_OUTPUT_TOKENS</span>,
+        response.usage.completion_tokens)
+    span.<span class="fn">add_event</span>(<span class="str">"gen_ai.assistant.message"</span>,
+        attributes={<span class="str">"content"</span>: response.choices[<span class="num">0</span>].message.content})</code></pre>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">Events vs. attributes</div>
+        <p>The GenAI conventions deliberately put message content in <em>events</em>, not span attributes. Events are timestamped, can be streamed, and can be dropped by a head-based sampler without losing the span. This is the pattern that keeps trace payloads manageable when prompts are 50 KB+.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-04">
+    <div class="slide-number">04</div>
+    <h2>Langfuse &mdash; Open Source, Self-Host</h2>
+    <p>Langfuse (MIT licence, <code>langfuse</code> Python/TypeScript SDK, v2.x) is a self-hostable LLM observability platform. Self-host with Docker Compose (Postgres + ClickHouse + Redis + web app) or deploy to Kubernetes via the Helm chart at <code>langfuse/langfuse-helm</code>.</p>
+
+    <div class="code-block">
+        <div class="code-header">Langfuse Python SDK &mdash; decorator-based instrumentation</div>
+<pre><code><span class="kw">from</span> langfuse.decorators <span class="kw">import</span> <span class="fn">observe</span>, langfuse_context
+
+<span class="mac">@observe</span>(name=<span class="str">"answer-question"</span>)
+<span class="kw">def</span> <span class="fn">answer_question</span>(user_id: str, question: str) -> str:
+    langfuse_context.<span class="fn">update_current_trace</span>(
+        user_id=user_id,
+        tags=[<span class="str">"support"</span>, <span class="str">"billing"</span>],
+        session_id=<span class="str">"sess-abc123"</span>
+    )
+
+    <span class="mac">@observe</span>(as_type=<span class="str">"retrieval"</span>)
+    <span class="kw">def</span> <span class="fn">retrieve_docs</span>(q):
+        docs = vector_db.<span class="fn">search</span>(q, k=<span class="num">5</span>)
+        langfuse_context.<span class="fn">update_current_observation</span>(
+            input=q, output=docs, metadata={<span class="str">"k"</span>: <span class="num">5</span>})
+        <span class="kw">return</span> docs
+
+    docs = <span class="fn">retrieve_docs</span>(question)
+    completion = openai_client.chat.completions.<span class="fn">create</span>(
+        model=<span class="str">"gpt-4o"</span>,
+        messages=[{<span class="str">"role"</span>:<span class="str">"user"</span>,<span class="str">"content"</span>:question}]
+    )
+    <span class="kw">return</span> completion.choices[<span class="num">0</span>].message.content</code></pre>
+    </div>
+
+    <div class="diagram-grid cols-3">
+        <div class="diagram-panel accent-border">
+            <h4>Data model</h4>
+            <p><strong>Trace</strong> &rarr; <strong>Observations</strong> (spans, events, generations). Each generation carries token counts, model, cost, latency. Scores attach to any observation.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Evals</h4>
+            <p>Built-in LLM-as-judge templates (<code>hallucination</code>, <code>toxicity</code>, <code>relevance</code>, <code>correctness</code>). Run on-the-fly or as batch over historical traces. Scores returned as floats 0&ndash;1 with an optional label string.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Self-host sizing</h4>
+            <p>Postgres (4 vCPU / 16 GB) + ClickHouse (8 vCPU / 32 GB) handles ~500 rps of trace ingestion. Redis for queue; object store (S3-compat) for large payloads. ClickHouse compresses traces ~10:1.</p>
+        </div>
+    </div>
+</section>
+
+<section class="slide" id="slide-05">
+    <div class="slide-number">05</div>
+    <h2>Arize Phoenix &mdash; OTel-Native, Eval Built-In</h2>
+    <p>Arize Phoenix (<code>arize-phoenix</code> v4.x, Apache 2.0) is built directly on OpenTelemetry. It speaks OTLP natively &mdash; no proprietary SDK required. Run it locally with <code>phoenix serve</code> (SQLite) or on-prem with PostgreSQL.</p>
+
+    <div class="code-block">
+        <div class="code-header">Phoenix &mdash; OTel auto-instrumentation (Python)</div>
+<pre><code><span class="kw">import</span> phoenix <span class="kw">as</span> px
+<span class="kw">from</span> openinference.instrumentation.openai <span class="kw">import</span> <span class="type">OpenAIInstrumentor</span>
+<span class="kw">from</span> opentelemetry <span class="kw">import</span> trace
+<span class="kw">from</span> opentelemetry.exporter.otlp.proto.http.trace_exporter <span class="kw">import</span> <span class="type">OTLPSpanExporter</span>
+<span class="kw">from</span> opentelemetry.sdk.trace <span class="kw">import</span> <span class="type">TracerProvider</span>
+<span class="kw">from</span> opentelemetry.sdk.trace.export <span class="kw">import</span> <span class="type">BatchSpanProcessor</span>
+
+<span class="cm"># Start Phoenix on localhost:6006</span>
+session = px.<span class="fn">launch_app</span>()
+
+provider = <span class="type">TracerProvider</span>()
+provider.<span class="fn">add_span_processor</span>(
+    <span class="type">BatchSpanProcessor</span>(
+        <span class="type">OTLPSpanExporter</span>(endpoint=<span class="str">"http://localhost:6006/v1/traces"</span>)
+    )
+)
+trace.<span class="fn">set_tracer_provider</span>(provider)
+
+<span class="cm"># Auto-patch the OpenAI client — zero code changes to call sites</span>
+<span class="type">OpenAIInstrumentor</span>().<span class="fn">instrument</span>()</code></pre>
+    </div>
+
+    <h3>Phoenix eval framework</h3>
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Built-in eval templates</h4>
+            <ul>
+                <li><code>HallucinationEvaluator</code> &mdash; checks if completion contradicts context</li>
+                <li><code>QAEvaluator</code> &mdash; correctness given reference answer</li>
+                <li><code>RelevanceEvaluator</code> &mdash; document relevance to query</li>
+                <li><code>ToxicityEvaluator</code> &mdash; content safety</li>
+                <li><code>SummarizationEvaluator</code> &mdash; faithfulness to source</li>
+            </ul>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Running evals on traces</h4>
+            <p>Pull spans from Phoenix&rsquo;s REST API (<code>GET /v1/spans?project=…</code>), run the eval template (which itself calls an LLM), push scores back with <code>POST /v1/evaluations</code>. Scores appear alongside spans in the UI. Run as a nightly Airflow DAG or a real-time Kafka consumer.</p>
+        </div>
+    </div>
+
+    <div class="callout">
+        <div class="callout-label">OpenInference instrumentation library</div>
+        <p><code>openinference-instrumentation-*</code> provides drop-in OTel instrumentors for OpenAI, Anthropic, LangChain, LlamaIndex, DSPy, and Bedrock. Each adds the OTel GenAI attributes and events automatically. Phoenix, Jaeger, Zipkin, or any OTLP backend will accept the same data.</p>
+    </div>
+</section>
+
+<section class="slide" id="slide-06">
+    <div class="slide-number">06</div>
+    <h2>Helicone &amp; LangSmith &mdash; Hosted Options</h2>
+    <p>When you don&rsquo;t want to operate trace infrastructure yourself, two hosted platforms dominate: Helicone for gateway-level capture, LangSmith for LangChain-native deep tracing.</p>
+
+    <div class="diagram-grid cols-2">
+        <div class="diagram-panel accent-border">
+            <h4>Helicone</h4>
+            <p><strong>How it works:</strong> swap your base URL to <code>https://oai.helicone.ai/v1</code>; add <code>Helicone-Auth: Bearer sk-…</code>. Helicone is a proxy that records every request/response, then forwards to OpenAI. No SDK changes required.</p>
+            <p><strong>Features:</strong> request logging, token/cost analytics, rate limiting, prompt versioning, caching (exact-match). Self-hostable via Docker (<code>HELICONE_S3_*</code> env vars point at your own bucket).</p>
+            <p><strong>Pricing:</strong> free to 10 K requests/month; $0.000100/request beyond (2025 pricing).</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>LangSmith</h4>
+            <p><strong>How it works:</strong> set <code>LANGCHAIN_TRACING_V2=true</code> and <code>LANGCHAIN_API_KEY=ls_…</code>. Every LangChain / LangGraph run automatically emits a trace. Works without LangChain via <code>@traceable</code> decorator or the REST API.</p>
+            <p><strong>Features:</strong> nested run trees, dataset &amp; eval harness, prompt hub, annotation queues for human feedback, regression testing across prompt versions.</p>
+            <p><strong>Pricing:</strong> free tier 5 K traces/month; $10/seat/month + $0.50/1 K traces (2025 pricing).</p>
+        </div>
+    </div>
+
+    <h3>Comparison matrix</h3>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Feature</th><th>Langfuse</th><th>Arize Phoenix</th><th>Helicone</th><th>LangSmith</th></tr></thead>
+            <tbody>
+                <tr><td>Self-hostable</td><td><span class="badge ok">Yes</span></td><td><span class="badge ok">Yes</span></td><td><span class="badge ok">Yes</span></td><td><span class="badge bad">No</span></td></tr>
+                <tr><td>OTel native</td><td><span class="badge warn">Partial</span></td><td><span class="badge ok">Yes</span></td><td><span class="badge bad">No</span></td><td><span class="badge warn">Partial</span></td></tr>
+                <tr><td>Built-in evals</td><td><span class="badge ok">Yes</span></td><td><span class="badge ok">Yes</span></td><td><span class="badge bad">No</span></td><td><span class="badge ok">Yes</span></td></tr>
+                <tr><td>Proxy-only (no SDK)</td><td><span class="badge bad">No</span></td><td><span class="badge bad">No</span></td><td><span class="badge ok">Yes</span></td><td><span class="badge bad">No</span></td></tr>
+                <tr><td>Dataset management</td><td><span class="badge ok">Yes</span></td><td><span class="badge warn">Basic</span></td><td><span class="badge bad">No</span></td><td><span class="badge ok">Yes</span></td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="slide" id="slide-07">
+    <div class="slide-number">07</div>
+    <h2>Sampling Strategy &mdash; What to Capture</h2>
+    <p>Capturing every trace in full detail at production LLM volumes is expensive and often unnecessary. A layered sampling strategy captures what matters without overwhelming your trace store.</p>
+
+    <h3>Four sampling layers</h3>
+    <div class="diagram-vertical">
+        <div class="diagram-box accent">Head-based sampler &mdash; probability-based, before any processing</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Tail-based sampler &mdash; keeps 100% of traces with errors or high latency</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box">Content sampler &mdash; drop prompt/completion text for repetitive high-volume routes</div>
+        <div class="diagram-arrow">&darr;</div>
+        <div class="diagram-box accent">Eval trigger &mdash; queue selected traces for LLM-as-judge scoring</div>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Sampler</th><th>OTel mechanism</th><th>Typical rate</th></tr></thead>
+            <tbody>
+                <tr><td><strong>Probabilistic</strong></td><td><code>TraceIdRatioBased(0.05)</code> &mdash; 5% of new traces</td><td>5% general traffic</td></tr>
+                <tr><td><strong>Always-on for errors</strong></td><td><code>ParentBased(TraceIdRatioBased)</code> + tail filter in the Collector</td><td>100% of error traces</td></tr>
+                <tr><td><strong>Always-on for slow</strong></td><td>Collector <code>tail_sampling</code> processor with latency policy (&gt; p95)</td><td>100% &gt; SLO threshold</td></tr>
+                <tr><td><strong>User-tier</strong></td><td>Baggage attribute <code>user_tier=enterprise</code>; sampler reads baggage</td><td>100% enterprise, 10% free</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="code-block">
+        <div class="code-header">OTel Collector config &mdash; tail sampling with error + latency policies</div>
+<pre><code><span class="type">processors</span>:
+  <span class="type">tail_sampling</span>:
+    <span class="type">decision_wait</span>: <span class="num">10s</span>
+    <span class="type">policies</span>:
+      - <span class="type">name</span>: <span class="str">errors-policy</span>
+        <span class="type">type</span>: <span class="str">status_code</span>
+        <span class="type">status_code</span>: {<span class="type">status_codes</span>: [<span class="str">ERROR</span>]}
+      - <span class="type">name</span>: <span class="str">slow-policy</span>
+        <span class="type">type</span>: <span class="str">latency</span>
+        <span class="type">latency</span>: {<span class="type">threshold_ms</span>: <span class="num">5000</span>}
+      - <span class="type">name</span>: <span class="str">probabilistic</span>
+        <span class="type">type</span>: <span class="str">probabilistic</span>
+        <span class="type">probabilistic</span>: {<span class="type">sampling_percentage</span>: <span class="num">5</span>}</code></pre>
+    </div>
+</section>
+
+<section class="slide" id="slide-08">
+    <div class="slide-number">08</div>
+    <h2>PII Handling &amp; Retention</h2>
+    <p>Trace stores are often the most dangerous location for PII: prompts are rich natural-language text that carries names, email addresses, medical details, and financial data. Three obligations govern your approach.</p>
+
+    <div class="diagram-grid cols-3">
+        <div class="diagram-panel accent-border">
+            <h4>Redact before export</h4>
+            <p>Apply Presidio (or the gateway scrubber from Deck 01) to event content before the OTel <code>BatchSpanProcessor</code> exports. Use the OTel <code>AttributesProcessor</code> to replace <code>gen_ai.*.content</code> events with redacted copies. Never rely on the trace backend to do redaction &mdash; you have no control over what it indexes.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Retention policies</h4>
+            <p>Store structural span data (tokens, cost, latency, model) indefinitely. Store full prompt/completion content for 30&ndash;90 days only, under a lifecycle policy (<code>aws s3api put-bucket-lifecycle-configuration</code>). Separate the payload store (S3-compatible) from the metadata store (ClickHouse/Postgres) so you can purge payloads without losing metrics.</p>
+        </div>
+        <div class="diagram-panel accent-border">
+            <h4>Right-to-erasure (GDPR Art. 17)</h4>
+            <p>Tag every trace with a <code>user_id</code> attribute. Build a deletion pipeline that, given a user ID, soft-deletes or scrubs all spans in Langfuse / Phoenix and purges matching objects from S3. Test this path quarterly &mdash; it will be called in production.</p>
+        </div>
+    </div>
+
+    <h3>Trace field classification</h3>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Field</th><th>Classification</th><th>Action</th></tr></thead>
+            <tbody>
+                <tr><td><code>gen_ai.usage.*</code>, latency, model</td><td>Operational metadata</td><td>Retain indefinitely; no redaction needed</td></tr>
+                <tr><td><code>gen_ai.*.message.content</code> events</td><td>May contain PII</td><td>Redact before export; 30-day TTL on payload store</td></tr>
+                <tr><td>Tool call inputs / outputs</td><td>Often structured PII (names, IDs)</td><td>Redact field-level; 30-day TTL</td></tr>
+                <tr><td>Session / user ID</td><td>Pseudonymous identifier</td><td>Retain; needed for erasure pipeline and debugging</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="slide" id="slide-09">
+    <div class="slide-number">09</div>
+    <h2>What to Take Away</h2>
+    <ul>
+        <li><strong>LLM observability &ne; distributed tracing.</strong> Token cost, non-determinism, quality scores, and nested tool call trees are first-class concerns that standard APM tools miss.</li>
+        <li><strong>Structure your traces.</strong> Root span &rarr; LLM generation spans &rarr; tool/retrieval child spans. Propagate <code>traceparent</code> across every async boundary.</li>
+        <li><strong>Use OTel GenAI conventions.</strong> <code>gen_ai.system</code>, <code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code>. Put content in <em>events</em>, not attributes.</li>
+        <li><strong>Langfuse</strong> is the best self-hosted option; deploy Postgres + ClickHouse, use the <code>@observe</code> decorator. <strong>Arize Phoenix</strong> is OTel-native and eval-first &mdash; use it when you already have an OTel pipeline.</li>
+        <li><strong>Helicone</strong> (proxy swap, zero SDK) is ideal for quick capture with no code changes. <strong>LangSmith</strong> is the natural choice for LangChain/LangGraph shops.</li>
+        <li><strong>Sample intelligently</strong>: 5% head-based + 100% errors + 100% slow traces. Tail-sample in the Collector, not the SDK.</li>
+        <li><strong>PII in traces is a compliance risk.</strong> Redact before export, 30-day payload TTL, and implement a right-to-erasure pipeline before launch.</li>
+    </ul>
+
+    <div class="callout">
+        <div class="callout-label">Where to next</div>
+        <p>Deck 03 covers the three caching layers &mdash; exact, semantic, and provider-side prompt cache &mdash; and how to route requests based on cost, capability, and latency.</p>
+    </div>
+</section>
+
+<footer class="footer">
+    <p>Part of the <a href="https://github.com/BrendanJamesLynskey/LLM_Hub_LLMOps">Production LLMOps Series</a></p>
+    <p style="margin-top: 0.5rem; font-size: 0.8rem;"><a href="https://github.com/BrendanJamesLynskey/LLM_Hub_LLMOps">Back to Series Index</a></p>
+</footer>
+<script>
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.style.opacity = '1';
+                entry.target.style.transform = 'translateY(0)';
+            }
+        });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.slide').forEach(slide => {
+        slide.style.opacity = '0';
+        slide.style.transform = 'translateY(30px)';
+        slide.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+        observer.observe(slide);
+    });
+</script>
+</body>
+</html>
